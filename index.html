@@ -1,0 +1,532 @@
+<head>
+    <style>
+        body { margin: 0; }
+        .links-container {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            text-align: center;
+        }
+        .links-container a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+            font-family: Arial, sans-serif;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        .links-container a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* New popup styles */
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(23, 23, 23, 0.95);
+            border-radius: 12px;
+            padding: 25px;
+            color: white;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 5px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 300px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .popup.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -48%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .popup-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .popup-close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.3s;
+        }
+
+        .popup-close:hover {
+            color: white;
+        }
+
+        .popup-content {
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .popup-links {
+            display: flex;
+            gap: 10px;
+        }
+
+        .popup-link {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .popup-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .title-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .glass-title {
+            font-family: 'Arial', sans-serif;
+            font-size: 3.5rem;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            animation: titleFloat 3s ease-in-out infinite, glowPulse 2s ease-in-out infinite;
+            cursor: default;
+            transition: transform 0.3s ease;
+        }
+
+        .glass-title:hover {
+            transform: scale(1.05);
+        }
+
+        @keyframes titleFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { 
+                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            }
+            50% { 
+                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.6);
+                text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            }
+        }
+    </style>
+  
+    <script src="//unpkg.com/globe.gl"></script>
+</head>
+  
+<body>
+    <div class="title-container">
+        <h1 class="glass-title">Willy's World</h1>
+    </div>
+    <div id="globeViz"></div>
+    <div class="links-container">
+        <a href="https://github.com" target="_blank">GitHub</a>
+        <a href="https://nasa.gov" target="_blank">NASA</a>
+        <a href="https://openai.com" target="_blank">OpenAI</a>
+        <a href="https://wikipedia.org" target="_blank">Wikipedia</a>
+        <a href="https://space.com" target="_blank">Space.com</a>
+    </div>
+
+    <!-- Add popup HTML -->
+    <div class="popup" id="cityPopup">
+        <div class="popup-header">
+            <h2 class="popup-title"></h2>
+            <button class="popup-close">&times;</button>
+        </div>
+        <div class="popup-content"></div>
+        <div class="popup-links"></div>
+    </div>
+  
+    <script type="module">
+        import * as THREE from '//unpkg.com/three/build/three.module.js';
+  
+        // Random data generator
+        const N = 20;
+        const arcsData = [...Array(N).keys()].map(() => ({
+            startLat: (Math.random() - 0.5) * 180,
+            startLng: (Math.random() - 0.5) * 360,
+            endLat: (Math.random() - 0.5) * 180,
+            endLng: (Math.random() - 0.5) * 360,
+            color: `rgb(${Math.round(Math.random() * 255)}, ${Math.round(Math.random() * 255)}, ${Math.round(Math.random() * 255)})`
+        }));
+
+        // Enhanced points data with more information
+        const pointsData = [
+            {
+                lat: 40.7128,
+                lng: -74.0060,
+                size: 0.5,
+                color: 'yellow',
+                label: 'New York',
+                description: 'The most populous city in the United States, known for its iconic skyline and cultural diversity.',
+                links: [
+                    { text: 'Tourism', url: 'https://www.nycgo.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/New_York_City' }
+                ]
+            },
+            {
+                lat: 51.5074,
+                lng: -0.1278,
+                size: 0.5,
+                color: 'yellow',
+                label: 'London',
+                description: 'The capital of England and the United Kingdom, a global center for finance, culture, and history.',
+                links: [
+                    { text: 'Visit London', url: 'https://www.visitlondon.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/London' }
+                ]
+            },
+            {
+                lat: 35.6762,
+                lng: 139.6503,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Tokyo',
+                description: 'Japan\'s busy capital, mixing ultramodern and traditional elements, from neon-lit skyscrapers to historic temples.',
+                links: [
+                    { text: 'Go Tokyo', url: 'https://www.gotokyo.org' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Tokyo' }
+                ]
+            },
+            {
+                lat: -33.8688,
+                lng: 151.2093,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Sydney',
+                description: 'Australia\'s largest city, famous for its Opera House, harbor bridge, and beautiful beaches.',
+                links: [
+                    { text: 'Visit Sydney', url: 'https://www.sydney.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Sydney' }
+                ]
+            },
+            {
+                lat: 33.6189,
+                lng: -117.9289,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Newport Beach',
+                description: 'A coastal city in Southern California known for its beautiful harbor, luxury shopping, and pristine beaches.',
+                links: [
+                    { text: 'Visit Newport Beach', url: 'https://www.visitnewportbeach.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Newport_Beach,_California' }
+                ]
+            },
+            {
+                lat: 37.7749,
+                lng: -122.4194,
+                size: 0.5,
+                color: 'yellow',
+                label: 'San Francisco',
+                description: 'A tech hub known for the Golden Gate Bridge, cable cars, and vibrant culture.',
+                links: [
+                    { text: 'SF Tourism', url: 'https://www.sftravel.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/San_Francisco' }
+                ]
+            },
+            {
+                lat: 39.7684,
+                lng: -86.1581,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Indianapolis',
+                description: 'The capital of Indiana, famous for the Indianapolis 500 and its rich sports culture.',
+                links: [
+                    { text: 'Visit Indy', url: 'https://www.visitindy.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Indianapolis' }
+                ]
+            },
+            {
+                lat: -1.2921,
+                lng: 36.8219,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Nairobi',
+                description: 'The capital of Kenya, a major tech hub in East Africa with vibrant culture and wildlife.',
+                links: [
+                    { text: 'Tourism', url: 'https://magicalkenya.com/nairobi' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Nairobi' }
+                ]
+            },
+            {
+                lat: -33.9249,
+                lng: 18.4241,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Cape Town',
+                description: 'South African coastal city known for Table Mountain, beaches, and wine regions.',
+                links: [
+                    { text: 'Visit Cape Town', url: 'https://www.capetown.travel' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Cape_Town' }
+                ]
+            },
+            {
+                lat: 30.0444,
+                lng: 31.2357,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Cairo',
+                description: 'Egypt\'s capital, home to ancient pyramids and rich historical heritage.',
+                links: [
+                    { text: 'Tourism', url: 'https://egypt.travel/en/cities/cairo' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Cairo' }
+                ]
+            },
+            {
+                lat: 37.4419,
+                lng: -122.1430,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Palo Alto',
+                description: 'Heart of Silicon Valley, home to Stanford University and countless tech startups.',
+                links: [
+                    { text: 'AI Office Bot', url: 'https://aiofficebot.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Palo_Alto,_California' }
+                ]
+            },
+            {
+                lat: 33.7458,
+                lng: -117.8261,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Tustin',
+                description: 'Historic Orange County city known for its tech industry and quality of life.',
+                links: [
+                    { text: 'Tustin Recruiting', url: 'https://tustinrecruiting.com' },
+                    { text: 'Tustin Jobs', url: 'https://tustinjobs.com' }
+                ]
+            },
+            {
+                lat: 33.6411,
+                lng: -117.7758,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Laguna Hills',
+                description: 'Scenic Southern California city with beautiful residential areas.',
+                links: [
+                    { text: 'Window Cleaning', url: 'https://lagunahillswindowcleaning.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Laguna_Hills,_California' }
+                ]
+            },
+            {
+                lat: 52.3676,
+                lng: 4.9041,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Amsterdam',
+                description: 'Innovation hub of the Netherlands, known for its startup ecosystem.',
+                links: [
+                    { text: 'Productized Studio', url: 'https://productized.studio' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Amsterdam' }
+                ]
+            },
+            {
+                lat: 1.3521,
+                lng: 103.8198,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Singapore',
+                description: 'Global tech hub and smart city pioneer in Southeast Asia.',
+                links: [
+                    { text: 'Warm Websites', url: 'https://warmwebsites.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Singapore' }
+                ]
+            },
+            {
+                lat: 34.0522,
+                lng: -118.2437,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Los Angeles',
+                description: 'Entertainment capital and growing tech hub of the West Coast.',
+                links: [
+                    { text: 'Craig Comm', url: 'https://craigcomm.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Los_Angeles' }
+                ]
+            },
+            {
+                lat: 51.5074,
+                lng: -0.1278,
+                size: 0.5,
+                color: 'yellow',
+                label: 'London Tech City',
+                description: 'Europe\'s largest tech hub, located in East London.',
+                links: [
+                    { text: 'No Code Jobs', url: 'https://nocodejobs.org' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/East_London_Tech_City' }
+                ]
+            },
+            {
+                lat: 48.8566,
+                lng: 2.3522,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Paris',
+                description: 'Major European tech hub with a thriving startup ecosystem.',
+                links: [
+                    { text: 'Indie Affiliate', url: 'https://indieaffiliate.io' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Paris' }
+                ]
+            },
+            {
+                lat: 25.2048,
+                lng: 55.2708,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Dubai',
+                description: 'Middle East\'s technology and innovation center.',
+                links: [
+                    { text: 'Lollib', url: 'https://lollib.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Dubai' }
+                ]
+            },
+            {
+                lat: 43.6532,
+                lng: -79.3832,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Toronto',
+                description: 'Canada\'s largest tech hub and a major global innovation center.',
+                links: [
+                    { text: 'Okay Directory', url: 'https://okay.directory' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Toronto' }
+                ]
+            },
+            {
+                lat: 32.7157,
+                lng: -117.1611,
+                size: 0.5,
+                color: 'yellow',
+                label: 'San Diego',
+                description: 'Southern California\'s tech and biotech hub with beautiful beaches.',
+                links: [
+                    { text: 'Ford Pressure Washing', url: 'https://FordPressureWashing.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/San_Diego' }
+                ]
+            },
+            {
+                lat: 41.8781,
+                lng: -87.6298,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Chicago',
+                description: 'Major US tech hub and center for industrial innovation.',
+                links: [
+                    { text: 'Best Electrician Jobs', url: 'https://bestelectricianjobs.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Chicago' }
+                ]
+            },
+            {
+                lat: 35.9375,
+                lng: 14.3754,
+                size: 0.5,
+                color: 'yellow',
+                label: 'Malta',
+                description: 'Mediterranean island nation with ancient temples, crystal-clear waters, and interesting drinking age rumors from the 90s. I used to spend summers here in the late 90s - pretty rad place. They told me the drinking age was 12 (though I\'m still not sure if that was true!)',
+                links: [
+                    { text: 'Visit Malta', url: 'https://www.visitmalta.com' },
+                    { text: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Malta' }
+                ]
+            }
+        ];
+
+        // Popup handling functions
+        const popup = document.getElementById('cityPopup');
+        const closePopup = () => popup.classList.remove('active');
+
+        document.querySelector('.popup-close').addEventListener('click', closePopup);
+
+        const showPopup = (point) => {
+            const title = popup.querySelector('.popup-title');
+            const content = popup.querySelector('.popup-content');
+            const links = popup.querySelector('.popup-links');
+
+            title.textContent = point.label;
+            content.textContent = point.description;
+            
+            // Clear and rebuild links
+            links.innerHTML = '';
+            point.links.forEach(link => {
+                const a = document.createElement('a');
+                a.href = link.url;
+                a.target = '_blank';
+                a.className = 'popup-link';
+                a.textContent = link.text;
+                links.appendChild(a);
+            });
+
+            popup.classList.add('active');
+        };
+
+        const world = Globe()
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+            .arcsData(arcsData)
+            .arcColor('color')
+            .arcDashLength(0.4)
+            .arcDashGap(0.2)
+            .arcDashAnimateTime(1500)
+            .pointsData(pointsData)
+            .pointColor('color')
+            .pointLabel('label')
+            .pointRadius('size')
+            .pointAltitude(0.1)
+            .onPointClick(showPopup)
+            (document.getElementById('globeViz'));
+
+        // Custom globe material
+        const globeMaterial = world.globeMaterial();
+        globeMaterial.bumpScale = 10;
+        new THREE.TextureLoader().load('//unpkg.com/three-globe/example/img/earth-water.png', texture => {
+            globeMaterial.specularMap = texture;
+            globeMaterial.specular = new THREE.Color('grey');
+            globeMaterial.shininess = 15;
+        });
+
+        const directionalLight = world.lights().find(light => light.type === 'DirectionalLight');
+        directionalLight && directionalLight.position.set(1, 1, 1);
+
+        // Auto-rotate
+        world.controls().autoRotate = true;
+        world.controls().autoRotateSpeed = 0.5;
+    </script>
+</body>
